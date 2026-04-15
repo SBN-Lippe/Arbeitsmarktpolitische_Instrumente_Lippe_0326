@@ -1,0 +1,156 @@
+app.py
+import streamlit as st
+import pandas as pd
+import yaml
+import plotly.express as px
+import plotly.graph_objects as go
+from pathlib import Path
+
+# Page config
+st.set_page_config(
+    page_title="AMP-Dashboard Kreis Lippe",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# Load YAML config
+@st.cache_data
+def load_config():
+    with open('config.yaml', 'r', encoding='utf-8') as f:
+        return yaml.safe_load(f)
+
+# Load Excel data
+@st.cache_data
+def load_data(file_path):
+    return pd.read_excel(file_path)
+
+config = load_config()
+dashboard_config = config['create_dashboard']
+
+# Load data
+try:
+    df = load_data(dashboard_config['datasource'])
+except FileNotFoundError:
+    st.error(f"Datei nicht gefunden: {dashboard_config['datasource']}")
+    st.stop()
+
+# Header
+st.title(dashboard_config['title'])
+st.markdown("---")
+
+# Sidebar - Filters
+st.sidebar.header("🔍 Filter")
+filters_data = {}
+
+for filter_config in dashboard_config['filters']:
+    filter_name = filter_config['name']
+    options = filter_config['options']
+    selected = st.sidebar.multiselect(
+        filter_name,
+        options=options,
+        default=[options[0]]
+    )
+    filters_data[filter_name] = selected
+
+# Apply filters to dataframe
+filtered_df = df.copy()
+for filter_name, selected_values in filters_data.items():
+    if filter_name in filtered_df.columns:
+        filtered_df = filtered_df[filtered_df[filter_name].isin(selected_values)]
+
+# Metrics Section
+st.subheader("📊 Kennzahlen")
+metric_cols = st.columns(len(dashboard_config['metrics']))
+
+for idx, metric_config in enumerate(dashboard_config['metrics']):
+    metric_name = metric_config['name']
+    calculation = metric_config['calculation']
+    
+    # Calculate metric value
+    if calculation == "sum":
+        if metric_name in filtered_df.columns:
+            value = filtered_df[metric_name].sum()
+        else:
+            value = len(filtered_df)
+    elif calculation == "percentage_change":
+        value = "N/A"  # Würde Jahresvergleich brauchen
+    else:
+        value = "N/A"
+    
+    with metric_cols[idx]:
+        st.metric(label=metric_name, value=f"{value:,.0f}")
+
+st.markdown("---")
+
+# Visualizations Section
+st.subheader("📈 Visualisierungen")
+
+# Layout rendering
+for row_config in dashboard_config['layout']:
+    row_cols = st.columns([col['col'] for col in row_config['row']])
+    
+    for col_idx, col_config in enumerate(row_config['row']):
+        content_type = col_config['content']
+        
+        with row_cols[col_idx]:
+            # Find visualization config
+            viz_config = next(
+                (v for v in dashboard_config['visualizations'] if v['title'] == content_type or 'chart' in v['type']),
+                None
+            )
+            
+            if viz_config is None:
+                # Find by type
+                for viz in dashboard_config['visualizations']:
+                    if content_type in viz['type']:
+                        viz_config = viz
+                        break
+            
+            if viz_config:
+                viz_type = viz_config['type']
+                viz_title = viz_config['title']
+                
+                st.write(f"**{viz_title}**")
+                
+                if viz_type == "line_chart":
+                    try:
+                        x_axis = viz_config['x_axis']
+                        y_axis = viz_config['y_axis']
+                        if x_axis in filtered_df.columns and y_axis in filtered_df.columns:
+                            fig = px.line(
+                                filtered_df.groupby(x_axis)[y_axis].sum().reset_index(),
+                                x=x_axis,
+                                y=y_axis,
+                                markers=True,
+                                title=viz_title
+                            )
+                            st.plotly_chart(fig, use_container_width=True)
+                    except Exception as e:
+                        st.warning(f"Fehler beim Erstellen des Line Charts: {e}")
+                
+                elif viz_type == "bar_chart":
+                    try:
+                        x_axis = viz_config['x_axis']
+                        y_axis = viz_config['y_axis']
+                        if x_axis in filtered_df.columns and y_axis in filtered_df.columns:
+                            fig = px.bar(
+                                filtered_df.groupby(x_axis)[y_axis].sum().reset_index(),
+                                x=x_axis,
+                                y=y_axis,
+                                title=viz_title
+                            )
+                            st.plotly_chart(fig, use_container_width=True)
+                    except Exception as e:
+                        st.warning(f"Fehler beim Erstellen des Bar Charts: {e}")
+                
+                elif viz_type == "table":
+                    try:
+                        columns = viz_config.get('columns', filtered_df.columns.tolist())
+                        available_cols = [c for c in columns if c in filtered_df.columns]
+                        st.dataframe(filtered_df[available_cols], use_container_width=True)
+                    except Exception as e:
+                        st.warning(f"Fehler beim Erstellen der Tabelle: {e}")
+
+# Footer
+st.markdown("---")
+st.markdown("*Dashboard für Arbeitsmarktpolitische Instrumente - Kreis Lippe*")
