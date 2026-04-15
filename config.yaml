@@ -1,0 +1,36 @@
+create_dashboard:
+  title: "Arbeitsmarktpolitische Instrumente im Kreis Lippe"
+  datasource: "data/amp-uebersicht-05766-0-xlsx.xlsx"
+  filters:
+    - name: "Berichtsmonat"
+      options: ["März 2026", "Februar 2026", "Januar 2026"]
+    - name: "Instrumententyp"
+      options: ["Aktivierung und berufliche Eingliederung", "Berufliche Weiterbildung", "Förderung der Selbständigkeit"]
+  metrics:
+    - name: "Teilnehmende insgesamt"
+      calculation: "sum"
+    - name: "Neueinsteiger"
+      calculation: "sum"
+    - name: "Veränderung Vorjahresmonat"
+      calculation: "percentage_change"
+  visualizations:
+    - type: "line_chart"
+      title: "Teilnehmende über die Zeit"
+      x_axis: "Berichtsmonat"
+      y_axis: "Teilnehmende insgesamt"
+    - type: "bar_chart"
+      title: "Neueinsteiger nach Instrumententyp"
+      x_axis: "Instrumententyp"
+      y_axis: "Neueinsteiger"
+    - type: "table"
+      title: "Detailansicht der Instrumente"
+      columns: ["Instrumententyp", "Teilnehmende insgesamt", "Neueinsteiger", "Veränderung Vorjahresmonat"]
+  layout:
+    - row:
+        - col: 6
+          content: "line_chart"
+        - col: 6
+          content: "bar_chart"
+    - row:
+        - col: 12
+          content: "table"
